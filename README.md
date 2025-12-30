@@ -203,6 +203,12 @@ data/
    print(scores)
    ```
 
+5. **Run Batch Evaluation** (uses `test_questions.json`):
+   ```bash
+   python ragas_evaluator.py
+   ```
+   This loads questions from `test_questions.json` and computes Response Relevancy and Faithfulness metrics for each, outputting per-question scores and aggregate means.
+
 ### **Integration Testing**
 
 1. **Run the complete pipeline**:
