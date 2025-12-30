@@ -98,27 +98,34 @@ class ChromaEmbeddingPipelineTextOnly:
             return [(text, metadata)]
         
         chunks = []
-        # Implement chunking logic with overlap
-        # Try to break at sentence boundaries
         start = 0
         while start < len(text):
-            end = start + self.chunk_size
+            # Calculate end position, never exceeding chunk_size
+            end = min(start + self.chunk_size, len(text))
+            
+            # Try to find a sentence boundary near the end (but only if not at end of text)
             if end < len(text):
-                # Try to find a sentence boundary near the end
                 last_period = text.rfind(".", start, end)
                 if last_period != -1 and last_period > start:
                     end = last_period + 1
             
-            # Extract chunk
+            # Extract chunk (guaranteed to be <= chunk_size)
             chunk = text[start:end].strip()
             if chunk:
-                # Create metadata for each chunk
                 chunk_metadata = metadata.copy()
                 chunk_metadata["chunk_index"] = len(chunks)
                 chunks.append((chunk, chunk_metadata))
             
-            # Move start for next chunk with overlap
-            start = max(start + 1, end - self.chunk_overlap)
+            # If we've reached the end of the text, break
+            if end >= len(text):
+                break
+            
+            # Move start for next chunk with consistent overlap
+            new_start = end - self.chunk_overlap
+            # Ensure we always make forward progress (avoid infinite loop)
+            if new_start <= start:
+                new_start = end
+            start = new_start
         
         return chunks if chunks else [(text, metadata)]
     
