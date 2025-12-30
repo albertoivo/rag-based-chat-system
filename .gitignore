@@ -1,3 +1,5 @@
 .env
 __pycache__/*
 chroma_embedding_text_only.log
+venv
+.venv
