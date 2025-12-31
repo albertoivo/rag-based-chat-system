@@ -84,7 +84,7 @@ class ChromaEmbeddingPipelineTextOnly:
     
     def chunk_text(self, text: str, metadata: Dict[str, Any]) -> List[Tuple[str, Dict[str, Any]]]:
         """
-        Split text into chunks with metadata
+        Split text into chunks with metadata, ensuring consistent overlap.
         
         Args:
             text: Text to chunk
@@ -92,6 +92,11 @@ class ChromaEmbeddingPipelineTextOnly:
             
         Returns:
             List of (chunk_text, chunk_metadata) tuples
+        
+        Implementation notes:
+            - Chunks never exceed chunk_size characters
+            - Overlap between consecutive chunks is consistently chunk_overlap
+            - Sentence boundary optimization only applies if it doesn't break overlap guarantee
         """
         # Handle short texts that don't need chunking
         if len(text) <= self.chunk_size:
@@ -99,15 +104,24 @@ class ChromaEmbeddingPipelineTextOnly:
         
         chunks = []
         start = 0
+        # Fallback stride to guarantee progress while preserving overlap intent
+        fallback_stride = max(1, self.chunk_size - self.chunk_overlap)
+        
         while start < len(text):
             # Calculate end position, never exceeding chunk_size
             end = min(start + self.chunk_size, len(text))
             
             # Try to find a sentence boundary near the end (but only if not at end of text)
+            # Guard: only shorten to sentence boundary if chunk length remains > chunk_overlap
+            # (strictly greater than, to ensure new_start = end - chunk_overlap will advance past start)
             if end < len(text):
                 last_period = text.rfind(".", start, end)
                 if last_period != -1 and last_period > start:
-                    end = last_period + 1
+                    # Only use sentence boundary if the resulting chunk is > chunk_overlap
+                    # This ensures we can maintain consistent overlap AND make forward progress
+                    potential_end = last_period + 1
+                    if (potential_end - start) > self.chunk_overlap:
+                        end = potential_end
             
             # Extract chunk (guaranteed to be <= chunk_size)
             chunk = text[start:end].strip()
@@ -120,11 +134,15 @@ class ChromaEmbeddingPipelineTextOnly:
             if end >= len(text):
                 break
             
-            # Move start for next chunk with consistent overlap
+            # Enforce true stride: next chunk starts chunk_overlap before end
+            # This ensures the overlap between consecutive chunks is exactly chunk_overlap
             new_start = end - self.chunk_overlap
-            # Ensure we always make forward progress (avoid infinite loop)
+            
+            # If new_start <= start, we wouldn't make progress
+            # Fall back to fixed stride to guarantee forward progress
             if new_start <= start:
-                new_start = end
+                new_start = start + fallback_stride
+            
             start = new_start
         
         return chunks if chunks else [(text, metadata)]

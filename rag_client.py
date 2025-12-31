@@ -1,7 +1,9 @@
 import chromadb
 from chromadb.config import Settings
+from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
 from typing import Dict, List, Optional
 from pathlib import Path
+import os
 
 def discover_chroma_backends() -> Dict[str, Dict[str, str]]:
     """Discover available ChromaDB backends in the project directory"""
@@ -63,14 +65,44 @@ def discover_chroma_backends() -> Dict[str, Dict[str, str]]:
     # Return complete backends dictionary with all discovered collections
     return backends
 
-def initialize_rag_system(chroma_dir: str, collection_name: str):
-    """Initialize the RAG system with specified backend (cached for performance)"""
-
-    # Create a chomadb persistentclient
+def initialize_rag_system(chroma_dir: str, collection_name: str, 
+                          openai_api_key: Optional[str] = None,
+                          embedding_model: str = "text-embedding-3-small"):
+    """
+    Initialize the RAG system with specified backend.
+    
+    Args:
+        chroma_dir: Path to ChromaDB persistence directory
+        collection_name: Name of the collection to use
+        openai_api_key: OpenAI API key for embedding queries. 
+                        If not provided, will try to use CHROMA_OPENAI_API_KEY env var.
+        embedding_model: OpenAI embedding model to use (default: text-embedding-3-small)
+    
+    Returns:
+        Tuple of (collection, success: bool, error: str or None)
+    """
+    # Get API key from parameter or environment variable
+    api_key = openai_api_key or os.environ.get("CHROMA_OPENAI_API_KEY")
+    
+    if not api_key:
+        return None, False, "OpenAI API key not provided and CHROMA_OPENAI_API_KEY not set"
+    
+    # Create OpenAI embedding function for query embedding
+    # This ensures the user question is properly embedded when querying
+    embedding_function = OpenAIEmbeddingFunction(
+        api_key=api_key,
+        model_name=embedding_model
+    )
+    
+    # Create a ChromaDB PersistentClient
     client = chromadb.PersistentClient(path=chroma_dir)
     
-    # Return the collection with the collection_name
-    collection = client.get_collection(name=collection_name)
+    # Return the collection with the embedding function
+    # This ensures collection.query() can embed query_texts properly
+    collection = client.get_collection(
+        name=collection_name,
+        embedding_function=embedding_function
+    )
     return collection, True, None
 
 def retrieve_documents(collection, query: str, n_results: int = 3, 
@@ -125,7 +157,8 @@ def format_context(documents: List[str], metadatas: List[Dict]) -> str:
         source = metadata.get("source", "Unknown Source")
         
         # Extract category information from metadata with fallback value
-        category = metadata.get("category", "Unknown Category")
+        # Note: ingestion uses 'document_category' as the metadata key
+        category = metadata.get("document_category", "Unknown Category")
         # Clean up category name formatting (replace underscores, capitalize)
         category = category.replace("_", " ").title()
         

@@ -69,10 +69,13 @@ def generate_response(openai_key, user_message: str, context: str,
     except Exception as e:
         return f"Error generating response: {e}"
 
-def evaluate_response_quality(question: str, answer: str, contexts: List[str]) -> Dict[str, float]:
+def evaluate_response_quality(question: str, answer: str, contexts: List[str], 
+                              additional_metrics: Optional[List[str]] = None) -> Dict[str, float]:
     """Evaluate response quality using RAGAS metrics"""
     try:
-        return ragas_evaluator.evaluate_response_quality(question, answer, contexts)
+        return ragas_evaluator.evaluate_response_quality(
+            question, answer, contexts, additional_metrics=additional_metrics
+        )
     except Exception as e:
         return {"error": f"Evaluation failed: {str(e)}"}
 
@@ -174,6 +177,17 @@ def main():
         st.subheader("📊 Evaluation Settings")
         enable_evaluation = st.checkbox("Enable RAGAS Evaluation", value=RAGAS_AVAILABLE)
         
+        # Additional metrics selection (only shown if evaluation is enabled)
+        additional_metrics = []
+        if enable_evaluation:
+            st.markdown("**Additional Metrics** (beyond Response Relevancy & Faithfulness)")
+            additional_metrics = st.multiselect(
+                "Select additional metrics",
+                options=["bleu", "rouge", "precision"],
+                default=[],
+                help="BLEU/ROUGE measure text similarity. Precision measures context relevance."
+            )
+        
         # Initialize RAG system when backend changes
         if (st.session_state.current_backend != selected_backend_key):
             st.session_state.current_backend = selected_backend_key
@@ -243,7 +257,8 @@ def main():
                         evaluation_scores = evaluate_response_quality(
                             prompt, 
                             response, 
-                            contexts_list
+                            contexts_list,
+                            additional_metrics=additional_metrics if additional_metrics else None
                         )
                         st.session_state.last_evaluation = evaluation_scores
         
